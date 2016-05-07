@@ -1,0 +1,18 @@
+{
+  "name": "tweeparse",
+  "main": "server.js",
+  "dependencies": {
+    "body-parser": "~1.0.1",
+    "express": "~4.0.0",
+    "node-tweet-stream": "^1.6.0",
+    "tweet-pipe": "^1.0.0",
+    "ws": "^0.4.32"
+  },
+  "devDependencies": {},
+  "version": "0.0.0",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC"
+}

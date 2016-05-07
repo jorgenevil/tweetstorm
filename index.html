@@ -1,0 +1,740 @@
+<html>
+<head>
+<title>Twitter Battle</title>
+<script type="text/javascript" src="d3.js"></script>
+<style>
+
+#one,
+#two {
+	position: absolute;
+	top: 50px;
+	right: 30px;
+	font-size: 48px;
+	color: white;
+	font-family: helvetica neue;
+	font-weight: 900;
+	text-shadow:
+		-2px -2px 0 #000,
+		2px -2px 0 #000,
+		-2px 2px 0 #000,
+		2px 2px 0 #000;
+   	}
+
+#one {
+	right: 30px;
+	}
+
+#two {
+	left: 30px;
+	}
+	
+#onelabel,
+#twolabel {
+	position: absolute;
+	top: 25px;
+	font-size: 24px;
+	color: white;
+	font-family: helvetica neue;
+	font-weight: 900;
+	text-shadow:
+		-2px -2px 0 #000,
+		2px -2px 0 #000,
+		-2px 2px 0 #000,
+		2px 2px 0 #000;	
+		}
+
+#onelabel {
+	right: 30px;
+	}
+
+#twolabel {
+	left: 30px;
+	}
+	
+#spoiler {
+	z-index: 999;
+	position: absolute;
+	left: 10px;
+	bottom: 10px;
+	padding: 2px;
+	background: rgba(255,255,255,0.25);
+	font-family: helvetica neue;
+	font-size: 12px;
+	border-radius: 2px;
+	padding-left: 5px;
+	padding-right: 5px;
+	display: none;
+	}
+	
+.axis path,
+.axis line {
+    fill: none;
+    stroke: rgba(0,0,0,0.5);
+    shape-rendering: crispEdges;
+}
+
+.axis text {
+	fill: rgba(0,0,0,0.5);
+	font-size: 10px; 
+	font-family: helvetica neue;
+}
+	
+.tick text {}
+	
+</style>
+
+</head>
+<body style="margin: 0">
+
+<div id="onelabel">one</div>
+<div id="one"></div>
+
+<div id="twolabel">two</div>
+<div id="two"></div>
+
+<div id="spoiler">
+	This is a realtime visualization of tweets containing the words "one" and "two"
+</div>
+
+</body>
+
+	<script>
+
+
+	// This code is meant for an art project, and has no practical function 
+	// besides from counting tweets with the word "one" or "two" in it.
+
+	// You may experience that the result appears a tad "jumpy".
+	// That's because the server collects tweets, and ships them out 
+	// six times per second.
+	
+	// Because of this, the circles will sometimes get updated with a small
+	// number, and sometimes with a large number, depending on the activity on twitter.
+	
+	// Of course, you could set up a steady stream from the server, but then you
+	// will have to deal with the functions upd8two() and upd8one() being 
+	// fired up to hundreds of times pr. second, which in turn will suck up
+	// a lot of the client's CPU power.
+	
+	// Apart from that, the code cleans up pretty well. I have tested long connections
+	// of several hours, collecting millions of tweets in the browser, and it seems 
+	// to work fine.
+
+	var oneWord = 'Hillary Clinton';
+	var twoWord = 'Donald Trump';
+	// Tweets pr pixel for circle radius expansion
+	var circleSpeed = 1;
+
+
+
+	// UNIVERSAL STANDARDS
+	// UNIVERSAL STANDARDS
+	// UNIVERSAL STANDARDS		
+	
+	// Containers that holds the actual numbers
+	var oneNo = document.getElementById('one');
+	var oneLabel = document.getElementById('onelabel');
+	oneLabel.innerHTML = oneWord;
+
+	var twoNo = document.getElementById('two');
+	var twoLabel = document.getElementById('twolabel');
+	twoLabel.innerHTML = twoWord;	
+	
+	// Window size
+	var w = window.innerWidth;
+	var h = window.innerHeight;
+	
+	// Figure out the distance from circle center to farthest corner (hypotenuse)
+	var center2right = w - (w/4);
+	var _ha = (center2right)*(center2right);	// A (x)
+	var _hb = (h/2)*(h/2);				// B (y)
+	var _hcsq = _ha + _hb;				// C (hypotenuse)
+	
+	// Hypotenuse = Center of circle to farthest corner
+	var _hyp = Math.sqrt(_hcsq);
+		
+	// Holds the amounts of tweets [two,one] ~ start at zero	
+	var onetwo = [0,0];
+	
+	// // Tweets pr pixel for circle radius expansion
+	// var circleSpeed = 10;
+	
+	// How many tweets before we make a new circle
+	var newCircleAt = circleSpeed*70;
+	
+	// How many PIXEL's the radius is before a new circle is born		
+	var newCircleAtPIXEL = newCircleAt / circleSpeed;
+	
+	// How many circles there are in the visual field (used to remove the ones that are not there)
+	var maxCircles = Math.ceil(_hyp / newCircleAtPIXEL)+1;
+	
+	
+	
+	// Create arrays for the SVG circles
+  	var oneCircles = [],
+  	    twoCircles = [];	
+
+	// To block array so we don't end up going through them before they've finished
+	var oneBlock = false,
+	    twoBlock = false;
+
+
+
+	// D3 D3 D3 D3 D3 D3 D3 D3 D3
+	// D3 D3 D3 D3 D3 D3 D3 D3 D3
+	// D3 D3 D3 D3 D3 D3 D3 D3 D3
+
+
+	// Create canvas
+	var svg = d3.select('body')
+		.append('svg')
+		.attr("width", w)
+		.attr("height", h);
+
+	// Background
+    	var background = svg
+       	    	.append("rect")
+    	 	.attr("x", 0)
+	    	.attr("y", 0)
+	    	.attr("width", w)
+	    	.attr("height", h)
+	    	.attr("fill", "black");
+    	
+	// Create group
+	var circleGroup = svg.append('g');
+
+	// Create the first one circle
+	oneCircles[0] = circleGroup
+		.append('circle')	
+		.attr('cx', (w/4)*3)
+		.attr('cy', h/2)
+		.attr('r', 0)
+		.attr('fill', '#FF33FF')
+		.attr('opacity', 1);
+
+	// Create the first two circle
+	twoCircles[0] = circleGroup
+		.append('circle')
+		.attr('cx', w/4)
+		.attr('cy', h/2)
+		.attr('r', 0)
+		.attr('fill', '#666666')
+		.attr('opacity', 1);
+
+
+	// ONE BOX
+	var boxX = w - 200 - 20;
+	var boxY = h - 80;
+	var boxWidth = 200;
+	var boxHeight = 60;
+	var bpadding = 10;
+	
+	// Test array for Y values of one barometre
+	var oneYs = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
+	var xInterval = (boxWidth - bpadding) / oneYs.length;
+	
+	// oneBox
+  	var oneBox = svg
+	    	.append("rect")
+	    	.attr("x", boxX - 30)
+	    	.attr("y", boxY - 25)
+	    	.attr('rx', 5)
+	    	.attr("width", boxWidth + 30 )
+	    	.attr("height", boxHeight + 25 )
+	    	.attr("fill", "rgba(255,255,255,0.7)");
+    	
+	// oneLine Container
+	var oneBoxG = svg
+		.append('g');
+		
+	// Function to draw line
+	var lineFunction = d3.svg.line()
+		.x(function(d) { return d.x })
+		.y(function(d) { return d.y })
+		.interpolate('linear');
+		
+	// This scale needs to be updated every second
+	var oneScale = d3.scale.linear()
+		.domain([0, d3.max(oneYs)])
+		.range([(boxHeight-10),0]);
+	
+	// Holds ten last points
+	var lineData = [];	
+
+	// Make Y points
+	oneYs.forEach(function(oneY, i) {	
+		var _x = boxX + (xInterval*i) + bpadding/2;
+		var _y = boxY + oneScale(oneY);
+		var point = { "x": _x,   "y": _y };		
+		lineData.push(point);		
+	})
+
+	// Create Line
+	var oneLine = oneBoxG
+		.append('path')
+		.attr('d', lineFunction(lineData))
+		.attr('stroke', '#FF33FF')
+		.attr('stroke-width', 1)
+		.attr('fill', 'none');		
+			
+	// Title 
+	var oneAxisTitle = oneBoxG
+		.append('text')
+		.attr('transform', function() {	return 'translate(' + (boxX + boxWidth/2 - 10) + ',' + (boxY-10) + ')'; })
+		.attr('text-anchor', 'middle')
+		.attr('font-family', 'helvetica')
+		.attr('font-size', 12)
+		.attr('fill', 'rgba(0,0,0,0.5)')			
+		.text('Tweets containing "' + oneWord + '" (pr. second)')
+			
+	// Axis			
+	var oneAxisScale = d3.svg.axis()
+		.scale(oneScale)
+           	.orient("left")
+            	.ticks(4);
+                  
+	var oneAxis = oneBoxG
+		.append('g')
+		.attr('transform', function() { return 'translate(' + boxX + ',' + boxY + ')'; })
+		.attr("class", "axis")
+		.call(oneAxisScale);
+
+
+
+
+
+	// two BOX
+	// two BOX	
+	// two BOX	
+
+	var _twoBoxX = 45;
+	
+	// Test array for Y values of one barometre
+	var twoYs = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
+	var two_xInterval = (boxWidth - bpadding) / twoYs.length;
+	
+	// oneBox
+    	var twoBox = svg
+	    	.append("rect")
+	    	.attr("x", _twoBoxX - 30)
+	    	.attr("y", boxY - 25)
+	    	.attr('rx', 5)
+	    	.attr("width", boxWidth + 30 )
+	    	.attr("height", boxHeight + 25 )
+	    	.attr("fill", "rgba(255,255,255,0.7)");
+    	
+	// oneLine Container
+	var twoBoxG = svg
+		.append('g');
+		
+	// Function to draw line
+	var lineFunction = d3.svg.line()
+		.x(function(d) { return d.x })
+		.y(function(d) { return d.y })
+		.interpolate('linear');
+		
+	// This scale needs to be updated every second
+	var twoScale = d3.scale.linear()
+		.domain([0, d3.max(twoYs)])
+		.range([(boxHeight-10),0]);
+	
+	// Holds ten last points
+	var twoLineData = [];	
+
+	// Make Y points
+	twoYs.forEach(function(twoY, i) {	
+		var _x = _twoBoxX + (xInterval*i) + bpadding/2;
+		var _y = boxY + oneScale(twoY);
+		var point = { "x": _x,   "y": _y };		
+		twoLineData.push(point);		
+	})
+
+	// Create Line
+	var twoLine = twoBoxG
+		.append('path')
+		.attr('d', lineFunction(twoLineData))
+		.attr('stroke', 'yellow') // #09c8ff
+		.attr('stroke-width', 1)
+		.attr('fill', 'none');		
+			
+	// Title 
+	var twoAxisTitle = twoBoxG
+		.append('text')
+		.attr('transform', function() {	return 'translate(' + (_twoBoxX + boxWidth/2 - 10) + ',' + (boxY-10) + ')'; })
+		.attr('text-anchor', 'middle')
+		.attr('font-family', 'helvetica')
+		.attr('font-size', 12)
+		.attr('fill', 'rgba(0,0,0,0.5)')
+		.text('Tweets containing "' + twoWord + '" (pr. second)')
+			
+	// Axis			
+	var twoAxisScale = d3.svg.axis()
+		.scale(twoScale)
+            	.orient("left")
+            	.ticks(4);
+                  
+	var twoAxis = twoBoxG
+		.append('g')
+		.attr('transform', function() { return 'translate(' + _twoBoxX + ',' + boxY + ')'; })
+		.attr("class", "axis")
+		.call(twoAxisScale);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+	// Radius for when a circle should be completely faded out
+	// 		– _hyp: is the center of the circle to the farthest corner
+	// 		– newCircleAtPIXEL: is the distance in between the circles in pixels
+	// 		– _hyp + newCircleAtPIXEL: is the when the circle is no longer visible on the screen
+	
+	var _maxR = _hyp + newCircleAtPIXEL;
+
+	// OPACITY SCALE
+	// 		– when radius = 0, full opacity
+	// 		– when radius = out of edge, zero opacity
+	
+	var scale = d3.scale.linear()
+		.domain([0, (_maxR)])
+		.range([1,0]);
+
+
+
+
+	// ***********************************************************************************
+	// ***********************************************************************************
+	// ***********************************************************************************
+
+
+	// ===================
+	// UPDATE ONE CIRCLES
+	// UPDATE ONE CIRCLES
+	// UPDATE ONE CIRCLES		
+	// ===================
+	
+	// Count for each tweets that comes in, reset when a new circle is born
+	var oneBlockoundCounter = 0;
+
+	// Gets triggered every time the websocket pushes a message
+	// data is the number of one tweets passed in that round
+	function upd8one (data) {
+
+		// Add DATA to roundcounter (data is how many one tweets we've revceived)
+		oneBlockoundCounter+=data;
+
+		// Create a new circle if oneBlockoundcounter passes the newCircleAt ratio
+		if ( oneBlockoundCounter >= newCircleAt ) {
+			
+			// Add new circle
+			
+			// Define new color by random
+			var red = Math.floor((Math.random() * 255) + 1);
+			var green = Math.floor((Math.random() * 255) + 1);
+			var blue = Math.floor((Math.random() * 255) + 1);
+			var rgb = 'rgb(' + red + ',' + green + ',' + blue + ')';
+
+			// Create new SVG circle
+	        var newCircle = circleGroup
+				.append('circle')
+				.attr('cx', (w/4)*3)
+				.attr('cy', h/2)
+				.attr('r', 0)
+				.attr('fill', rgb)
+				.attr('opacity', 1);
+
+			// Push new SVG cirlcle in the array of circles
+			oneCircles.push(newCircle);
+			
+			// Reset the one round counter
+			oneBlockoundCounter = 0;
+			
+			// Remove circles that are on the outside
+			if ( oneCircles.length == maxCircles ) {
+
+				// Remove from DOM
+				oneCircles[0].remove();
+				
+				// Remove from Array
+				oneCircles.splice(0, 1);
+			}
+
+		}
+
+
+		// End of round counter / new circle part
+
+		// ========================================================
+
+		// Code below will run on every socket ping
+
+		// Set the number and data (how many new tweets we've got)
+		oneNo.innerHTML = onetwo[1]+=data
+
+		// Do not proceed if loop is running
+		if ( oneBlock ) return;
+
+		// Turn blocker on
+		oneBlock = true;
+
+		// LOOP: Update all the circles
+		for ( var i = 0; i<oneCircles.length; i++ ) {	
+
+			// Figure out new radius
+			var cR = parseFloat(oneCircles[i][0][0].getAttribute('r')) + (data / circleSpeed);
+
+			// Set new radius
+			oneCircles[i].attr('r', cR);	
+			
+			// Set opacity of circle
+			oneCircles[i].attr('opacity', function() { return scale(cR); });
+		}
+
+		// Turn off blocker
+		oneBlock = false;	
+
+	}
+
+
+
+	// ===================
+	// UPDATE two CIRCLES
+	// UPDATE two CIRCLES
+	// UPDATE two CIRCLES		
+	// ===================
+	
+	
+	// Count for each tweets that comes in, reset when a new circle is born
+	var twoRoundCounter = 0;
+
+	// Gets triggered every time the websocket pushes a message
+	// data is the number of two tweets passed in that round
+	function upd8two (data) {
+
+		// Add DATA to roundcounter (data is how many one tweets we've revceived)
+		twoRoundCounter+=data;
+
+		// Create a new circle if twoRoundCounter passes the newCircleAt ratio
+		if ( twoRoundCounter >= newCircleAt ) {
+			
+			// Add new circle
+			
+			// GRAYSCALE: Define new color by random
+			var digits = Math.floor((Math.random() * 128) + 1);
+			var rgb = 'rgb(' + digits + ',' + digits + ',' + digits + ')';
+
+			// Create new SVG circle
+        	var newCircle = circleGroup
+				.append('circle')
+				.attr('cx', w/4)
+				.attr('cy', h/2)
+				.attr('r', 0)
+				.attr('fill', rgb)
+				.attr('opacity', 1);
+
+			// Push new SVG cirlcle in the array of circles
+			twoCircles.push(newCircle);
+
+			// Reset round counter
+			twoRoundCounter = 0;
+
+			// Remove circles that are on the outside
+			if ( twoCircles.length == maxCircles ) {
+
+				// Remove from DOM
+				twoCircles[0].remove();
+				
+				// Remove from Array
+				twoCircles.splice(0, 1);
+			}
+
+		}
+		
+		// End of round counter / new circle part
+
+		// ========================================================
+
+		// Code below will run on every socket ping		
+
+		// Set the number and data (how many new tweets we've got)
+		twoNo.innerHTML = onetwo[0]+=data;
+
+			// Do not proceed if loop is running
+			if ( twoBlock ) return;
+		
+			// Turn blocker on
+			twoBlock = true;
+
+			// LOOP: Update all the circles
+			for ( var i = 0; i<twoCircles.length; i++ ) {	
+
+				// Figure out new radius
+				var cR = parseFloat(twoCircles[i][0][0].getAttribute('r')) + (data / circleSpeed);
+	
+				// Set new radius				
+				twoCircles[i].attr('r', cR);	
+				
+				// Set opacity of circle				
+				twoCircles[i].attr('opacity', function() { return scale(cR); });
+				
+			}
+
+			// Turn off blocker
+			twoBlock = false;
+		
+	}
+
+
+
+
+
+	// SOCKET
+	// SOCKET
+	// SOCKET   
+
+	function websocket() { 	  
+		
+		var supertwo = 0;
+		var superone = 0;		
+			  	
+
+		var connection = new WebSocket('ws://localhost:8008');
+
+		connection.onopen = function () {
+			connection.send("The time is " + new Date().getTime());
+		};
+
+		connection.onmessage = function (e) {
+
+			var data = JSON.parse(e.data)
+
+			// Run the update functions
+			upd8two(data.two);
+			
+			// Run the update functions
+			upd8one(data.one);
+			
+			
+			supertwo += data.two;
+			superone += data.one;			
+					
+			
+
+		};
+
+		connection.onclose = function(event) {
+		console.log(event);
+		};
+		
+		
+	
+		setTimeout(function() {
+			supertwo = 0;
+			superone = 0;			
+
+			setInterval(function() {
+			
+				// Update Line array
+				oneYs.push(superone);
+				oneYs.splice(0, 1);
+
+				// Update Line array
+				twoYs.push(supertwo);
+				twoYs.splice(0, 1);
+
+					
+
+				// Update the one scale
+				oneScale.domain([d3.min(oneYs), d3.max(oneYs)]);	
+				oneAxisScale.scale(oneScale);
+				oneAxis.call(oneAxisScale);				
+					
+
+				// Update the two scale
+				twoScale.domain([d3.min(twoYs), d3.max(twoYs)]);	
+				twoAxisScale.scale(twoScale);
+				twoAxis.call(twoAxisScale);				
+					
+
+
+				// Holds ten last points
+				oneLineData = [];	
+
+				// Holds ten last points
+				twoLineData = [];	
+
+
+			
+			
+				// Make Y points
+				oneYs.forEach(function(oneY, i) {
+					
+					var _x = boxX + (xInterval*i) + bpadding/2;
+					var _y = boxY + oneScale(oneY);
+					var point = { "x": _x,   "y": _y };
+					
+					oneLineData.push(point);					
+				})				
+
+
+				// Make Y points
+				twoYs.forEach(function(twoY, i) {
+					
+					var _x = _twoBoxX + (xInterval*i) + bpadding/2;
+					var _y = boxY + twoScale(twoY);
+					var point = { "x": _x,   "y": _y };
+					
+					twoLineData.push(point);					
+				})	
+				
+
+				// Create Line
+				oneLine.attr('d', lineFunction(oneLineData));				
+				twoLine.attr('d', lineFunction(twoLineData));
+				
+			
+				supertwo = 0;
+				superone = 0;				
+			
+			}, 600)		
+		}, 600)
+			
+
+	}
+
+
+	// Start the websocket
+	websocket();
+
+
+	</script>
+	
+	
+	<script>
+	  // (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+	  // (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+	  // m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+	  // })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+	
+	  // ga('create', 'UA-56677571-1', 'auto');
+	  // ga('send', 'pageview');
+	
+	</script>
+
+
+	</html>
